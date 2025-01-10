@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 #pragma once
 
@@ -19,7 +19,7 @@ public:
 	// Sets default values for this actor's properties
 	ARealtimeMeshBasicUsageActor();
 
-	virtual void OnGenerateMesh_Implementation() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 	
 	virtual void TickActor(float DeltaTime, ELevelTick TickType, FActorTickFunction& ThisTickFunction) override;
 };

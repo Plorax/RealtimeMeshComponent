@@ -1,11 +1,14 @@
-// Copyright TriAxis Games, L.L.C. All Rights Reserved.
+// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 #include "RealtimeMeshCore.h"
 
+#include "RealtimeMesh.h"
 #include "Data/RealtimeMeshSectionGroup.h"
 #include "Data/RealtimeMeshLOD.h"
 #include "Data/RealtimeMeshSection.h"
 #include "Data/RealtimeMeshData.h"
+#include "Core/RealtimeMeshKeys.h"
+#include "Data/RealtimeMeshUpdateBuilder.h"
 #include "RenderProxy/RealtimeMeshLODProxy.h"
 #include "RenderProxy/RealtimeMeshProxy.h"
 #include "RenderProxy/RealtimeMeshSectionGroupProxy.h"
@@ -19,6 +22,7 @@ enum class ERealtimeMeshStreamType_OLD
 	Vertex,
 	Index,
 };
+static_assert(sizeof(ERealtimeMeshStreamType_OLD) == 4);
 
 FArchive& operator<<(FArchive& Ar, FRealtimeMeshStreamKey& Key)
 {
@@ -41,10 +45,20 @@ FArchive& operator<<(FArchive& Ar, FRealtimeMeshStreamKey& Key)
 
 namespace RealtimeMesh
 {
+	void FRealtimeMeshSharedResources::SetOwnerMesh(URealtimeMesh* InOwningMesh, const FRealtimeMeshRef& InOwner)
+	{
+		OwningMesh = InOwningMesh, Owner = InOwner;
+	}
+
 	ERHIFeatureLevel::Type FRealtimeMeshSharedResources::GetFeatureLevel() const
 	{
 		if (const auto ProxyPinned = Proxy.Pin()) { return ProxyPinned->GetRHIFeatureLevel(); }
 		return GMaxRHIFeatureLevel;
+	}
+
+	FRealtimeMeshUpdateStateRef FRealtimeMeshSharedResources::CreateUpdateState() const
+	{
+		return MakeShared<FRealtimeMeshUpdateState>();
 	}
 
 	FRealtimeMeshVertexFactoryRef FRealtimeMeshSharedResources::CreateVertexFactory() const
@@ -86,9 +100,9 @@ namespace RealtimeMesh
 		return MakeShared<FRealtimeMeshSectionGroup>(ConstCastSharedRef<FRealtimeMeshSharedResources>(this->AsShared()), InKey);
 	}
 
-	FRealtimeMeshLODDataRef FRealtimeMeshSharedResources::CreateLOD(const FRealtimeMeshLODKey& InKey) const
+	FRealtimeMeshLODRef FRealtimeMeshSharedResources::CreateLOD(const FRealtimeMeshLODKey& InKey) const
 	{
-		return MakeShared<FRealtimeMeshLODData>(ConstCastSharedRef<FRealtimeMeshSharedResources>(this->AsShared()), InKey);
+		return MakeShared<FRealtimeMeshLOD>(ConstCastSharedRef<FRealtimeMeshSharedResources>(this->AsShared()), InKey);
 	}
 
 	FRealtimeMeshRef FRealtimeMeshSharedResources::CreateRealtimeMesh() const
@@ -102,3 +116,4 @@ namespace RealtimeMesh
 		return MakeShared<FRealtimeMeshSharedResources>();
 	}
 }
+

@@ -1,4 +1,4 @@
-// Copyright TriAxis Games, L.L.C. All Rights Reserved.
+// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 #pragma once
 
@@ -33,4 +33,4 @@ public:
 	}
 };
 
-DECLARE_LOG_CATEGORY_EXTERN(RealtimeMeshLog, Warning, All);
+REALTIMEMESHCOMPONENT_API DECLARE_LOG_CATEGORY_EXTERN(LogRealtimeMesh, Warning, All);

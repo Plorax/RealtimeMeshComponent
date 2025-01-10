@@ -1,17 +1,20 @@
-// Copyright TriAxis Games, L.L.C. All Rights Reserved.
+// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 #pragma once
 
-#include "Mesh/RealtimeMeshDataTypes.h"
+#include "Core/RealtimeMeshDataTypes.h"
 #include "Containers/ResourceArray.h"
-#include "Mesh/RealtimeMeshDataStream.h"
+#include "Core/RealtimeMeshDataStream.h"
 #if RMC_ENGINE_ABOVE_5_2
+#if RMC_ENGINE_BELOW_5_5
 #include "RHIResourceUpdates.h"
+#endif
 #include "DataDrivenShaderPlatformInfo.h"
 #endif
 
 namespace RealtimeMesh
 {
+	struct FRealtimeMeshUpdateContext;
 	class FRealtimeMeshGPUBuffer;
 	class FRealtimeMeshVertexBuffer;
 	class FRealtimeMeshIndexBuffer;
@@ -24,104 +27,34 @@ namespace RealtimeMesh
 		FBufferRHIRef Buffer;
 
 	public:
-		FRealtimeMeshSectionGroupStreamUpdateData(FRealtimeMeshStream&& InStream)
+		FRealtimeMeshSectionGroupStreamUpdateData(FRealtimeMeshStream&& InStream, EBufferUsageFlags InUsageFlags)
 			: Stream(MoveTemp(InStream))
-			  , UsageFlags(EBufferUsageFlags::None)
-		{
-		}
-
-		FRealtimeMeshSectionGroupStreamUpdateData(const FRealtimeMeshStream& InStream)
-			: Stream(InStream)
-			  , UsageFlags(EBufferUsageFlags::None)
+			, UsageFlags(InUsageFlags)
 		{
 		}
 
 		const FResourceArrayInterface* GetResource() const { return &Stream; }
-		FRealtimeMeshBufferLayoutDefinition GetBufferLayout() const { return Stream.GetLayoutDefinition(); }
+		FRealtimeMeshBufferLayout GetBufferLayout() const { return Stream.GetLayout(); }
 		FRealtimeMeshStreamKey GetStreamKey() const { return Stream.GetStreamKey(); }
 		int32 GetNumElements() const { return Stream.Num(); }
 		EBufferUsageFlags GetUsageFlags() const { return UsageFlags; }
 		FBufferRHIRef& GetBuffer() { return Buffer; }
 
-		void ConfigureBuffer(EBufferUsageFlags InUsageFlags, bool bShouldAttemptAsyncCreation = true)
-		{
-			UsageFlags = InUsageFlags;
-			/*if (GRHISupportsAsyncTextureCreation && bShouldAttemptAsyncCreation && !Buffer.IsValid())
-			{
-				FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Temp"), &Stream);
-				CreateInfo.bWithoutNativeResource = Stream.Num() == 0 || Stream.GetStride() == 0;
+		void CreateBufferAsyncIfPossible(FRealtimeMeshUpdateContext& UpdateContext);
 
-#if RMC_ENGINE_ABOVE_5_3
-				FRHIAsyncCommandList CommandList;
-
-				if (GetStreamKey().IsVertexStream())
-				{
-					Buffer = CommandList->CreateBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource,
-					                                   Stream.GetStride(), ERHIAccess::SRVMask, CreateInfo);
-				}
-				else
-				{
-					check(GetStreamKey().IsIndexStream());
-					Buffer = CommandList->CreateBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource,
-					                                   Stream.GetElementStride(), ERHIAccess::SRVMask, CreateInfo);
-				}
-#else
-				if (GetStreamKey().IsVertexStream())
-				{
-					Buffer = RHIAsyncCreateVertexBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource,
-						ERHIAccess::SRVMask, CreateInfo);
-				}
-				else
-				{
-					check(GetStreamKey().IsIndexStream());
-					Buffer = RHIAsyncCreateIndexBuffer(Stream.GetElementStride(), Stream.GetResourceDataSize(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource,
-						ERHIAccess::SRVMask, CreateInfo);
-				}
-#endif
-			}*/
-		}
-
-		void InitializeIfRequired()
-		{
-			if (!Buffer.IsValid())
-			{
-				check(Stream.GetResourceDataSize());
-				
-				FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Temp"), &Stream);
-				CreateInfo.bWithoutNativeResource = Stream.Num() == 0 || Stream.GetStride() == 0;
-
-#if RMC_ENGINE_ABOVE_5_3
-				FRHIAsyncCommandList CommandList;
-				if (GetStreamKey().IsVertexStream())
-				{
-					Buffer = CommandList->CreateVertexBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource, CreateInfo);
-				}
-				else
-				{
-					check(GetStreamKey().IsIndexStream());
-					Buffer =  CommandList->CreateIndexBuffer(Stream.GetElementStride(), Stream.GetResourceDataSize(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource, CreateInfo);
-				}
-#else
-				if (GetStreamKey().IsVertexStream())
-				{
-					Buffer = RHICreateVertexBuffer(Stream.GetResourceDataSize(), UsageFlags | BUF_VertexBuffer | BUF_ShaderResource, CreateInfo);
-				}
-				else
-				{
-					check(GetStreamKey().IsIndexStream());
-					Buffer = RHICreateIndexBuffer(Stream.GetElementStride(), Stream.GetResourceDataSize(), UsageFlags | BUF_IndexBuffer | BUF_ShaderResource, CreateInfo);
-				}
-#endif
-			}
-		}
+		void FinalizeInitialization(FRHICommandListBase& RHICmdList);
 	};
+
+
 
 	using FRealtimeMeshSectionGroupStreamUpdateDataRef = TSharedRef<FRealtimeMeshSectionGroupStreamUpdateData>;
 
 	class REALTIMEMESHCOMPONENT_API FRealtimeMeshGPUBuffer
 	{
 	protected:
-		FRealtimeMeshBufferLayoutDefinition BufferLayout;
+		FRealtimeMeshBufferLayout BufferLayout;
+		FRealtimeMeshElementTypeDetails ElementDetails;
+		FRealtimeMeshBufferMemoryLayout MemoryLayout;
 		uint32 BufferNum;
 		EBufferUsageFlags UsageFlags;
 
@@ -131,11 +64,13 @@ namespace RealtimeMesh
 
 	public:
 		FRealtimeMeshGPUBuffer(const TCHAR* InBufferName, const FRealtimeMeshBufferLayout& InBufferLayout)
-			: BufferLayout(FRealtimeMeshBufferLayoutUtilities::GetBufferLayoutDefinition(InBufferLayout))
-			  , BufferNum(0)
-			  , UsageFlags(BUF_Static | BUF_ShaderResource)
+			: BufferLayout(InBufferLayout)
+			, ElementDetails(FRealtimeMeshBufferLayoutUtilities::GetElementTypeDetails(InBufferLayout.GetElementType()))
+			, MemoryLayout(FRealtimeMeshBufferLayoutUtilities::GetBufferLayoutMemoryLayout(InBufferLayout))
+			, BufferNum(0)
+			, UsageFlags(BUF_Static | BUF_ShaderResource)
 #if WITH_EDITOR
-			  , BufferName(InBufferName)
+			, BufferName(InBufferName)
 #endif
 		{
 		}
@@ -152,33 +87,24 @@ namespace RealtimeMesh
 		}
 
 		virtual ERealtimeMeshStreamType GetStreamType() const = 0;
-		virtual void InitializeResources() = 0;
+		virtual void InitializeResources(FRHICommandListBase& RHICmdList, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) = 0;
 		virtual void ReleaseUnderlyingResource() = 0;
 		virtual bool IsResourceInitialized() const = 0;
 
-		FORCEINLINE const FRealtimeMeshBufferLayoutDefinition& GetBufferLayout() const { return BufferLayout; }
-		FORCEINLINE EPixelFormat GetElementFormat() const { return BufferLayout.GetElementTypeDefinition().GetPixelFormat(); }
+		FORCEINLINE const FRealtimeMeshBufferLayout& GetBufferLayout() const { return BufferLayout; }
+		FORCEINLINE EPixelFormat GetElementFormat() const { return ElementDetails.GetPixelFormat(); }
 		FORCEINLINE int32 GetElementStride() const { return GPixelFormats[GetElementFormat()].BlockBytes; }
-		FORCEINLINE uint32 GetStride() const { return BufferLayout.GetStride(); }
+		FORCEINLINE uint32 GetStride() const { return MemoryLayout.GetStride(); }
 		FORCEINLINE int32 Num() const { return BufferNum; }
 
-		FORCEINLINE int32 NumElements() const { return BufferLayout.GetBufferLayout().GetNumElements(); }
-		/*FORCEINLINE bool TryGetElementOffset(FName SubComponentName, uint16& OutSubComponentOffset) const
-		{
-			if (const uint8* Entry = BufferLayout.FindElementOffset(SubComponentName))
-			{
-				OutSubComponentOffset = *Entry;
-				return true;
-			}
-			return false;
-		}*/
+		FORCEINLINE int32 NumElements() const { return BufferLayout.GetNumElements(); }
 
 
 		static constexpr int32 RHIUpdateBatchSize = 16;
 
-		virtual void ApplyBufferUpdate(TRHIResourceUpdateBatcher<RHIUpdateBatchSize>& Batcher, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData)
+		/*virtual void ApplyBufferUpdate(FRHICommandListBase& RHICmdList, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData)
 		{
-			check(BufferLayout.GetBufferLayout() == UpdateData->GetBufferLayout().GetBufferLayout());
+			check(BufferLayout == UpdateData->GetBufferLayout());
 			BufferNum = UpdateData->GetNumElements();
 			UsageFlags = UpdateData->GetUsageFlags();
 
@@ -188,7 +114,7 @@ namespace RealtimeMesh
 
 			check(BufferLayout.IsValid());
 			check(GetStride() > 0);
-		}
+		}*/
 	};
 
 	class REALTIMEMESHCOMPONENT_API FRealtimeMeshVertexBuffer : public FRealtimeMeshGPUBuffer, public FVertexBufferWithSRV
@@ -202,13 +128,35 @@ namespace RealtimeMesh
 
 		virtual ERealtimeMeshStreamType GetStreamType() const override { return ERealtimeMeshStreamType::Vertex; }
 
-		virtual void InitializeResources() override
+		virtual void InitializeResources(FRHICommandListBase& RHICmdList, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) override
 		{
 #if RMC_ENGINE_ABOVE_5_3
-			InitResource(FRHICommandListImmediate::Get());
+			InitResource(RHICmdList);
 #else
 			InitResource();
 #endif
+
+			check(BufferLayout == UpdateData->GetBufferLayout());
+			BufferNum = UpdateData->GetNumElements();
+			UsageFlags = UpdateData->GetUsageFlags();
+
+#if WITH_EDITOR
+			BufferName = UpdateData->GetStreamKey().GetName().ToString();
+#endif
+
+			check(BufferLayout.IsValid());
+			check(GetStride() > 0);
+			
+			VertexBufferRHI = UpdateData->GetBuffer();
+			
+			if (VertexBufferRHI && RHISupportsManualVertexFetch(GMaxRHIShaderPlatform))
+			{
+#if RMC_ENGINE_ABOVE_5_3
+				ShaderResourceViewRHI = RHICmdList.CreateShaderResourceView(FShaderResourceViewInitializer(VertexBufferRHI, GetElementFormat()));
+#else
+				ShaderResourceViewRHI = RHICreateShaderResourceView(FShaderResourceViewInitializer(VertexBufferRHI, GetElementFormat()));
+#endif
+			}
 		}
 
 		virtual void ReleaseUnderlyingResource() override { ReleaseResource(); }
@@ -216,18 +164,18 @@ namespace RealtimeMesh
 		virtual bool IsResourceInitialized() const override { return IsInitialized(); }
 
 		/** Gets the format of the vertex */
-		FORCEINLINE EVertexElementType GetVertexType() const { return GetBufferLayout().GetElementTypeDefinition().GetVertexType(); }
+		FORCEINLINE EVertexElementType GetVertexType() const { return ElementDetails.GetVertexType(); }
 
 #if RMC_ENGINE_ABOVE_5_3
 		virtual void InitRHI(FRHICommandListBase& RHICmdList) override
 		{
-			FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Vertex-Init"));
+			/*FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Vertex-Init"));
 			CreateInfo.bWithoutNativeResource = true;
 			VertexBufferRHI = RHICmdList.CreateVertexBuffer(0, BUF_VertexBuffer | BUF_Static, CreateInfo);
 			if (VertexBufferRHI && RHISupportsManualVertexFetch(GMaxRHIShaderPlatform))
 			{
 				ShaderResourceViewRHI = RHICmdList.CreateShaderResourceView(FShaderResourceViewInitializer(VertexBufferRHI, GetElementFormat()));
-			}
+			}*/
 		}
 #else
 		virtual void InitRHI() override
@@ -242,24 +190,31 @@ namespace RealtimeMesh
 		}
 #endif
 
-		virtual void ApplyBufferUpdate(TRHIResourceUpdateBatcher<RHIUpdateBatchSize>& Batcher,
-		                               const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) override
+		virtual void ReleaseRHI() override
+		{
+			FVertexBufferWithSRV::ReleaseRHI();
+			BufferLayout = FRealtimeMeshBufferLayout::Invalid;
+			BufferNum = 0;
+			UsageFlags = BUF_None;
+		}
+		
+		/*virtual void ApplyBufferUpdate(FRHICommandListBase& RHICmdList, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) override
 		{
 			check(IsInitialized());
 
-			FRealtimeMeshGPUBuffer::ApplyBufferUpdate(Batcher, UpdateData);
+			FRealtimeMeshGPUBuffer::ApplyBufferUpdate(RHICmdList, UpdateData);
 			{
 				VertexBufferRHI = UpdateData->GetBuffer();
 				if (ShaderResourceViewRHI)
 				{
 #if RMC_ENGINE_ABOVE_5_3
-					ShaderResourceViewRHI = FRHICommandListImmediate::Get().CreateShaderResourceView(FShaderResourceViewInitializer(UpdateData->GetNumElements() > 0? VertexBufferRHI : nullptr, GetElementFormat()));
+					ShaderResourceViewRHI = RHICmdList.CreateShaderResourceView(FShaderResourceViewInitializer(UpdateData->GetNumElements() > 0? VertexBufferRHI : nullptr, GetElementFormat()));
 #else
 					ShaderResourceViewRHI = RHICreateShaderResourceView(FShaderResourceViewInitializer(UpdateData->GetNumElements() > 0? VertexBufferRHI : nullptr, GetElementFormat()));
 #endif
 				}
 				
-				/*Batcher.QueueUpdateRequest(VertexBufferRHI, UpdateData->GetNumElements() > 0? UpdateData->GetBuffer() : nullptr);
+				//Batcher.QueueUpdateRequest(VertexBufferRHI, UpdateData->GetNumElements() > 0? UpdateData->GetBuffer() : nullptr);
 
 #if RMC_ENGINE_BELOW_5_3
 				if (ShaderResourceViewRHI)
@@ -273,9 +228,9 @@ namespace RealtimeMesh
 						Batcher.QueueUpdateRequest(ShaderResourceViewRHI, nullptr, 0, 0);
 					}
 				}
-#endif*/
+#endif#1#
 			}
-		}
+		}*/
 	};
 
 	class REALTIMEMESHCOMPONENT_API FRealtimeMeshIndexBuffer : public FRealtimeMeshGPUBuffer, public FIndexBuffer
@@ -289,49 +244,70 @@ namespace RealtimeMesh
 
 		virtual ERealtimeMeshStreamType GetStreamType() const override { return ERealtimeMeshStreamType::Index; }
 
-		virtual void InitializeResources() override
+		virtual void InitializeResources(FRHICommandListBase& RHICmdList, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) override
 		{
 #if RMC_ENGINE_ABOVE_5_3
-			InitResource(FRHICommandListImmediate::Get());
+			InitResource(RHICmdList);
 #else
 			InitResource();
 #endif
+			
+			check(BufferLayout == UpdateData->GetBufferLayout());
+			BufferNum = UpdateData->GetNumElements();
+			UsageFlags = UpdateData->GetUsageFlags();
+
+#if WITH_EDITOR
+			BufferName = UpdateData->GetStreamKey().GetName().ToString();
+#endif
+
+			check(BufferLayout.IsValid());
+			check(GetStride() > 0);
+			
+			// Adjust size by number of elements to handle structs containing 3 indices.
+			BufferNum *= BufferLayout.GetNumElements();
+			IndexBufferRHI = UpdateData->GetBuffer();
+			//Batcher.QueueUpdateRequest(IndexBufferRHI, UpdateData->GetNumElements() > 0? UpdateData->GetBuffer() : nullptr);
 		}
 
 		virtual void ReleaseUnderlyingResource() override { ReleaseResource(); }
 
 		virtual bool IsResourceInitialized() const override { return IsInitialized(); }
-
-		/** Gets the format of the index buffer */
-		FORCEINLINE bool IsUsing32BitIndices() const { return FRealtimeMeshBufferLayoutUtilities::Is32BitIndex(GetBufferLayout().GetElementTypeDefinition()); }
-
+		
 #if RMC_ENGINE_ABOVE_5_3
 		virtual void InitRHI(FRHICommandListBase& RHICmdList) override
 		{
-			FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Vertex-Init"));
+			/*FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Vertex-Init"));
 			CreateInfo.bWithoutNativeResource = true;
-			IndexBufferRHI = RHICmdList.CreateIndexBuffer(sizeof(uint16), 0, BUF_VertexBuffer | BUF_Static, CreateInfo);
+			IndexBufferRHI = RHICmdList.CreateIndexBuffer(sizeof(uint16), 0, BUF_VertexBuffer | BUF_Static, CreateInfo);*/
 		}
 #else
 		virtual void InitRHI() override
 		{
 			FRHIResourceCreateInfo CreateInfo(TEXT("RealtimeMeshBuffer-Vertex-Init"));
 			CreateInfo.bWithoutNativeResource = true;
-			IndexBufferRHI = RHICreateIndexBuffer(sizeof(uint16), 0, BUF_VertexBuffer | BUF_Static, CreateInfo);
+			IndexBufferRHI = RHICreateIndexBuffer(sizeof(uint16), 0, BUF_IndexBuffer | BUF_Static, CreateInfo);
 		}
 #endif
 
-		virtual void ApplyBufferUpdate(TRHIResourceUpdateBatcher<RHIUpdateBatchSize>& Batcher,
-		                               const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) override
+		virtual void ReleaseRHI() override
+		{
+			FIndexBuffer::ReleaseRHI();
+			BufferLayout = FRealtimeMeshBufferLayout::Invalid;
+			BufferNum = 0;
+			UsageFlags = BUF_None;
+		}
+
+		
+		/*virtual void ApplyBufferUpdate(FRHICommandListBase& RHICmdList, const FRealtimeMeshSectionGroupStreamUpdateDataRef& UpdateData) override
 		{
 			check(IsInitialized());
-			FRealtimeMeshGPUBuffer::ApplyBufferUpdate(Batcher, UpdateData);
+			FRealtimeMeshGPUBuffer::ApplyBufferUpdate(RHICmdList, UpdateData);
 
 			// Adjust size by number of elements to handle structs containing 3 indices.
-			BufferNum *= BufferLayout.GetBufferLayout().GetNumElements();
+			BufferNum *= BufferLayout.GetNumElements();
 
 			IndexBufferRHI = UpdateData->GetBuffer();
 			//Batcher.QueueUpdateRequest(IndexBufferRHI, UpdateData->GetNumElements() > 0? UpdateData->GetBuffer() : nullptr);
-		}
+		}*/
 	};
 }

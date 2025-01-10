@@ -1,11 +1,10 @@
-﻿// Copyright TriAxis Games, L.L.C. All Rights Reserved.
+﻿// Copyright (c) 2015-2025 TriAxis Games, L.L.C. All Rights Reserved.
 
 #pragma once
 
 #include "CoreTypes.h"
-#include "RealtimeMeshDataStream.h"
-#include "RealtimeMeshDataTypes.h"
-#include "RealtimeMeshConfig.h"
+#include "Core/RealtimeMeshDataStream.h"
+#include "Core/RealtimeMeshDataTypes.h"
 #include "Algo/StableSort.h"
 
 struct FRealtimeMeshPolygonGroupRange;
@@ -50,7 +49,7 @@ namespace RealtimeMeshAlgo
 
 
 	template <typename PolygonGroupType>
-	void GenerateSortedRemapTable(const TConstArrayView<PolygonGroupType>& PolygonGroups, TArrayView<uint32> OutRemapTable)
+	void GenerateSortedRemapTable(TConstArrayView<const PolygonGroupType> PolygonGroups, TArrayView<uint32> OutRemapTable)
 	{
 		check(PolygonGroups.Num() == OutRemapTable.Num());
 
@@ -69,7 +68,7 @@ namespace RealtimeMeshAlgo
 
 	REALTIMEMESHCOMPONENT_API bool GenerateSortedRemapTable(const RealtimeMesh::FRealtimeMeshStream& PolygonGroups, TArrayView<uint32> OutRemapTable);
 
-	REALTIMEMESHCOMPONENT_API void ApplyRemapTableToStream(const TArrayView<uint32>& RemapTable, RealtimeMesh::FRealtimeMeshStream& Stream);
+	REALTIMEMESHCOMPONENT_API void ApplyRemapTableToStream(TArrayView<uint32> RemapTable, RealtimeMesh::FRealtimeMeshStream& Stream);
 
 	REALTIMEMESHCOMPONENT_API bool OrganizeTrianglesByPolygonGroup(RealtimeMesh::FRealtimeMeshStream& IndexStream, RealtimeMesh::FRealtimeMeshStream& PolygonGroupStream,
 	                                                               TArrayView<uint32> OutRemapTable);
@@ -79,7 +78,7 @@ namespace RealtimeMeshAlgo
 
 
 	template <typename PolygonGroupType>
-	void PropagateTriangleSegmentsToPolygonGroups(const TConstArrayView<FRealtimeMeshPolygonGroupRange>& TriangleSegments, TArrayView<PolygonGroupType>& OutPolygonGroupIndices)
+	void PropagateTriangleSegmentsToPolygonGroups(TConstArrayView<const FRealtimeMeshPolygonGroupRange> TriangleSegments, TArrayView<PolygonGroupType>& OutPolygonGroupIndices)
 	{
 		for (int32 Index = 0; Index < TriangleSegments.Num(); Index++)
 		{
@@ -92,7 +91,7 @@ namespace RealtimeMeshAlgo
 		}
 	}
 
-	REALTIMEMESHCOMPONENT_API void PropagateTriangleSegmentsToPolygonGroups(const TArrayView<FRealtimeMeshPolygonGroupRange>& TriangleSegments,
+	REALTIMEMESHCOMPONENT_API void PropagateTriangleSegmentsToPolygonGroups(TArrayView<FRealtimeMeshPolygonGroupRange> TriangleSegments,
 	                                                                        RealtimeMesh::FRealtimeMeshStream& OutPolygonGroupIndices);
 
 	/**
@@ -102,8 +101,8 @@ namespace RealtimeMeshAlgo
 	 * @return 
 	 */
 	template <typename PolygonGroupType>
-	typename TEnableIf<!TIsSame<PolygonGroupType, FRealtimeMeshPolygonGroupRange>::Value, bool>::Type ArePolygonGroupIndicesOptimal(
-		const TConstArrayView<PolygonGroupType>& PolygonGroupIndices)
+	typename TEnableIf<!std::is_same<PolygonGroupType, FRealtimeMeshPolygonGroupRange>::value, bool>::Type ArePolygonGroupIndicesOptimal(
+		TConstArrayView<const PolygonGroupType> PolygonGroupIndices)
 	{
 		TSet<PolygonGroupType> UniquePolygonGroupIndices;
 		PolygonGroupType LastPolygonGroupIndex = INDEX_NONE;
@@ -125,13 +124,13 @@ namespace RealtimeMeshAlgo
 		return true;
 	}
 
-	REALTIMEMESHCOMPONENT_API bool ArePolygonGroupIndicesOptimal(const TConstArrayView<FRealtimeMeshPolygonGroupRange>& TriangleSegments);
+	REALTIMEMESHCOMPONENT_API bool ArePolygonGroupIndicesOptimal(TConstArrayView<const FRealtimeMeshPolygonGroupRange> TriangleSegments);
 
 	REALTIMEMESHCOMPONENT_API bool ArePolygonGroupIndicesOptimal(const RealtimeMesh::FRealtimeMeshStream& PolygonGroupIndices);
 
 
 	template <typename PolygonGroupType>
-	void GatherSegmentsFromPolygonGroupIndices(const TConstArrayView<PolygonGroupType>& PolygonGroupIndices,
+	void GatherSegmentsFromPolygonGroupIndices(TConstArrayView<const PolygonGroupType> PolygonGroupIndices,
 	                                           const TFunctionRef<void(const FRealtimeMeshPolygonGroupRange& NewSegment)>& OnAddNewSegmentFunction)
 	{
 		if (PolygonGroupIndices.Num() < 1)
@@ -166,7 +165,7 @@ namespace RealtimeMeshAlgo
 
 
 	template <typename IndexType>
-	void GatherStreamRangesFromPolyGroupRanges(const TConstArrayView<FRealtimeMeshPolygonGroupRange>& PolygonGroupSegments, const TConstArrayView<IndexType>& Indices,
+	void GatherStreamRangesFromPolyGroupRanges(TConstArrayView<const FRealtimeMeshPolygonGroupRange> PolygonGroupSegments, TConstArrayView<const IndexType> Indices,
 	                                           TMap<int32, FRealtimeMeshStreamRange>& OutStreamRanges)
 	{
 		for (const auto& PolyGroup : PolygonGroupSegments)
@@ -202,7 +201,7 @@ namespace RealtimeMeshAlgo
 		}
 	}
 
-	REALTIMEMESHCOMPONENT_API void GatherStreamRangesFromPolyGroupRanges(const TConstArrayView<FRealtimeMeshPolygonGroupRange>& PolygonGroupSegments,
+	REALTIMEMESHCOMPONENT_API void GatherStreamRangesFromPolyGroupRanges(TConstArrayView<const FRealtimeMeshPolygonGroupRange> PolygonGroupSegments,
 	                                                                     const RealtimeMesh::FRealtimeMeshStream& Triangles,
 	                                                                     TMap<int32, FRealtimeMeshStreamRange>& OutStreamRanges);
 
@@ -211,7 +210,7 @@ namespace RealtimeMeshAlgo
 	                                                                     TMap<int32, FRealtimeMeshStreamRange>& OutStreamRanges);
 
 	template <typename PolygonGroupType, typename IndexType>
-	void GatherStreamRangesFromPolyGroupIndices(const TConstArrayView<PolygonGroupType>& PolygonGroupIndices, const TConstArrayView<IndexType>& Indices,
+	void GatherStreamRangesFromPolyGroupIndices(TConstArrayView<const PolygonGroupType> PolygonGroupIndices, TConstArrayView<const IndexType> Indices,
 	                                            TMap<int32, FRealtimeMeshStreamRange>& OutStreamRanges)
 	{
 		ensure(Indices.Num() >= PolygonGroupIndices.Num() * 3);
@@ -252,7 +251,7 @@ namespace RealtimeMeshAlgo
 	}
 
 	template <typename PolygonGroupType>
-	void GatherStreamRangesFromPolyGroupIndices(const TConstArrayView<PolygonGroupType>& PolygonGroupIndices, const RealtimeMesh::FRealtimeMeshStream& Indices,
+	void GatherStreamRangesFromPolyGroupIndices(TConstArrayView<const PolygonGroupType> PolygonGroupIndices, const RealtimeMesh::FRealtimeMeshStream& Indices,
 	                                            TMap<int32, FRealtimeMeshStreamRange>& OutStreamRanges)
 	{
 		if (Indices.GetLayout().GetElementType() == RealtimeMesh::GetRealtimeMeshDataElementType<uint16>())
@@ -278,7 +277,7 @@ namespace RealtimeMeshAlgo
 	}
 
 	template <typename IndexType>
-	void GatherStreamRangesFromPolyGroupIndices(const RealtimeMesh::FRealtimeMeshStream& PolygonGroupIndices, const TConstArrayView<IndexType>& Indices,
+	void GatherStreamRangesFromPolyGroupIndices(const RealtimeMesh::FRealtimeMeshStream& PolygonGroupIndices, TConstArrayView<const IndexType> Indices,
 	                                            TMap<int32, FRealtimeMeshStreamRange>& OutStreamRanges)
 	{
 		if (PolygonGroupIndices.GetLayout().GetElementType() == RealtimeMesh::GetRealtimeMeshDataElementType<uint16>())
@@ -308,7 +307,7 @@ namespace RealtimeMeshAlgo
 
 
 	template <typename TriangleType>
-	void GenerateTangents(const TConstArrayView<TriangleType>& Triangles, const TConstArrayView<FVector3f>& Vertices,
+	void GenerateTangents(TConstArrayView<const TriangleType> Triangles, TConstArrayView<const FVector3f> Vertices,
 	                      const TFunction<FVector2f(int32)>& UVGetter, const TFunctionRef<void(int32, FVector3f, FVector3f)>& TangentsSetter, bool bComputeSmoothNormals = true)
 	{
 		uint32 NumIndices = Triangles.Num();
@@ -372,7 +371,7 @@ namespace RealtimeMeshAlgo
 		FaceTangentZ.AddUninitialized(NumTris);
 
 		// Iterate over triangles
-		for (int32 TriIdx = 0; TriIdx < NumTris; TriIdx++)
+		for (uint32 TriIdx = 0; TriIdx < NumTris; TriIdx++)
 		{
 			uint32 CornerIndex[3];
 			FVector3f P[3];
@@ -380,7 +379,7 @@ namespace RealtimeMeshAlgo
 			for (int32 CornerIdx = 0; CornerIdx < 3; CornerIdx++)
 			{
 				// Find vert index (clamped within range)
-				uint32 VertIndex = FMath::Min(Triangles[(TriIdx * 3) + CornerIdx], NumVertices - 1);
+				uint32 VertIndex = FMath::Min(uint32(Triangles[(TriIdx * 3) + CornerIdx]), NumVertices - 1);
 
 				CornerIndex[CornerIdx] = VertIndex;
 				P[CornerIdx] = Vertices[VertIndex];
@@ -480,7 +479,7 @@ namespace RealtimeMeshAlgo
 		VertexTangentZSum.AddZeroed(NumVertices);
 
 		// For each vertex..
-		for (int VertxIdx = 0; VertxIdx < NumVertices; VertxIdx++)
+		for (uint32 VertxIdx = 0; VertxIdx < NumVertices; VertxIdx++)
 		{
 			// Find relevant triangles for normal
 			TArray<uint32> SmoothTris;
@@ -505,7 +504,7 @@ namespace RealtimeMeshAlgo
 		}
 
 		// Finally, normalize tangents and build output arrays	
-		for (int VertxIdx = 0; VertxIdx < NumVertices; VertxIdx++)
+		for (uint32 VertxIdx = 0; VertxIdx < NumVertices; VertxIdx++)
 		{
 			FVector3f& TangentX = VertexTangentXSum[VertxIdx];
 			FVector3f& TangentY = VertexTangentYSum[VertxIdx];
@@ -523,4 +522,21 @@ namespace RealtimeMeshAlgo
 			TangentsSetter(VertxIdx, TangentX, TangentZ);
 		}
 	}
+
+
+	
+	REALTIMEMESHCOMPONENT_API void GenerateTangents(RealtimeMesh::FRealtimeMeshStreamSet& StreamSet, bool bComputeSmoothNormals = true);
+
+	
+	REALTIMEMESHCOMPONENT_API TOptional<TMap<int32, FRealtimeMeshStreamRange>> GetStreamRangesFromPolyGroups(const RealtimeMesh::FRealtimeMeshStreamSet& Streams,
+		const FRealtimeMeshStreamKey& TrianglesKey = RealtimeMesh::FRealtimeMeshStreams::Triangles,
+		const FRealtimeMeshStreamKey& PolyGroupsKey = RealtimeMesh::FRealtimeMeshStreams::PolyGroups,
+		const FRealtimeMeshStreamKey& PolyGroupSegmentsKey = RealtimeMesh::FRealtimeMeshStreams::PolyGroupSegments);
+	
+	REALTIMEMESHCOMPONENT_API TOptional<TMap<int32, FRealtimeMeshStreamRange>> GetStreamRangesFromPolyGroupsDepthOnly(const RealtimeMesh::FRealtimeMeshStreamSet& Streams);
+
+
+
+
+	
 }
